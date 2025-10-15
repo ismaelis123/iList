@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ISLIST</title>
+    <link rel="stylesheet" href="style.css">
+    <link rel="manifest" href="manifest.json">
+    <meta name="theme-color" content="#4f46e5">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>📝 ISLIST</h1>
+            <button id="installBtn" class="install-btn" style="display: none;">
+                📲 Instalar App
+            </button>
+        </header>
+
+        <div class="add-task">
+            <input type="text" id="taskInput" placeholder="Nueva tarea...">
+            <input type="datetime-local" id="taskDateTime">
+            <button id="addBtn">➕ Agregar</button>
+        </div>
+
+        <div class="filters">
+            <button class="filter-btn active" data-filter="all">Todas</button>
+            <button class="filter-btn" data-filter="pending">Pendientes</button>
+            <button class="filter-btn" data-filter="completed">Completadas</button>
+        </div>
+
+        <ul id="taskList" class="task-list"></ul>
+
+        <div class="stats">
+            <span id="taskCount">Total: 0 tareas</span>
+            <button id="clearCompleted">Limpiar completadas</button>
+        </div>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>
