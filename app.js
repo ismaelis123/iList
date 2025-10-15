@@ -3,17 +3,22 @@ class TaskManager {
         this.tasks = this.loadTasks();
         this.currentFilter = 'all';
         this.deferredPrompt = null;
-        this.pushSubscription = null;
+        this.serviceWorker = null;
         
         this.initializeElements();
         this.setupEventListeners();
         this.renderTasks();
-        this.setupPWA();
-        this.setupPushNotifications();
-        this.checkScheduledTasks();
+        this.initializeApp();
         
-        // Verificar tareas cada minuto
-        setInterval(() => this.checkScheduledTasks(), 60000);
+        // Verificar tareas programadas
+        this.checkScheduledTasks();
+        setInterval(() => this.checkScheduledTasks(), 30000); // Cada 30 segundos
+    }
+
+    async initializeApp() {
+        await this.setupPWA();
+        await this.setupNotifications();
+        this.restoreScheduledNotifications();
     }
 
     initializeElements() {
@@ -51,139 +56,64 @@ class TaskManager {
         });
 
         this.installBtn.addEventListener('click', () => this.installPWA());
+
+        // Guardar tareas cuando se cierra la pestaña
+        window.addEventListener('beforeunload', () => {
+            this.saveTasks();
+        });
+
+        // Recuperar notificaciones cuando se vuelve a abrir
+        window.addEventListener('load', () => {
+            this.restoreScheduledNotifications();
+        });
     }
 
-    setupPWA() {
+    async setupPWA() {
         if ('serviceWorker' in navigator) {
-            navigator.serviceWorker.register('/sw.js')
-                .then(registration => {
-                    console.log('SW registered:', registration);
-                    return registration;
-                })
-                .catch(error => console.log('SW registration failed:', error));
+            try {
+                this.serviceWorker = await navigator.serviceWorker.register('/sw.js');
+                console.log('Service Worker registrado:', this.serviceWorker);
+                
+                // Esperar a que el Service Worker esté activo
+                if (this.serviceWorker.installing) {
+                    console.log('Service Worker instalando');
+                    this.serviceWorker.installing.postMessage({ type: 'SKIP_WAITING' });
+                }
+                
+                return this.serviceWorker;
+            } catch (error) {
+                console.log('Error registrando Service Worker:', error);
+            }
         }
+        return null;
     }
 
-    async setupPushNotifications() {
-        if (!('Notification' in window) || !('serviceWorker' in navigator)) {
-            console.log('Push notifications no soportadas');
-            return;
+    async setupNotifications() {
+        if (!('Notification' in window)) {
+            console.log('Este navegador no soporta notificaciones');
+            return false;
         }
 
         try {
-            // Solicitar permiso para notificaciones
             const permission = await Notification.requestPermission();
-            if (permission !== 'granted') {
-                console.log('Permiso de notificaciones denegado');
-                return;
+            console.log('Permiso de notificaciones:', permission);
+            
+            if (permission === 'granted') {
+                // Guardar en localStorage que las notificaciones están activas
+                localStorage.setItem('notificationsEnabled', 'true');
+                return true;
+            } else {
+                localStorage.setItem('notificationsEnabled', 'false');
+                return false;
             }
-
-            // Registrar service worker
-            const registration = await navigator.serviceWorker.ready;
-            
-            // Suscribirse a push notifications
-            this.pushSubscription = await registration.pushManager.subscribe({
-                userVisibleOnly: true,
-                applicationServerKey: this.urlBase64ToUint8Array(this.getPublicKey())
-            });
-
-            console.log('Suscripción push exitosa:', this.pushSubscription);
-            this.saveSubscription(this.pushSubscription);
-            
         } catch (error) {
-            console.log('Error en push notifications:', error);
+            console.log('Error solicitando permiso:', error);
+            return false;
         }
     }
 
-    // Clave pública VAPID (necesaria para push notifications)
-    getPublicKey() {
-        return 'BEl62iUYgUivxIkv69yViEuiBIa-Ib9-SkvMeAtA3LFgDzkrxZJjSgSnfckjBJuBkr3qBUYIHBQFLXYp5Nksh8U';
-    }
-
-    urlBase64ToUint8Array(base64String) {
-        const padding = '='.repeat((4 - base64String.length % 4) % 4);
-        const base64 = (base64String + padding)
-            .replace(/\-/g, '+')
-            .replace(/_/g, '/');
-
-        const rawData = window.atob(base64);
-        const outputArray = new Uint8Array(rawData.length);
-
-        for (let i = 0; i < rawData.length; ++i) {
-            outputArray[i] = rawData.charCodeAt(i);
-        }
-        return outputArray;
-    }
-
-    saveSubscription(subscription) {
-        localStorage.setItem('pushSubscription', JSON.stringify(subscription));
-    }
-
-    getSubscription() {
-        const saved = localStorage.getItem('pushSubscription');
-        return saved ? JSON.parse(saved) : null;
-    }
-
-    async sendPushNotification(task, type = 'reminder') {
-        const subscription = this.getSubscription();
-        if (!subscription) {
-            console.log('No hay suscripción push activa');
-            return;
-        }
-
-        // En una app real, aquí enviarías la notificación a un servidor
-        // Para esta demo, usaremos notificaciones locales programadas
-        
-        if (type === 'reminder') {
-            this.scheduleLocalNotification(task);
-        } else if (type === 'overdue') {
-            this.showLocalNotification('⏰ Tarea Vencida', `"${task.text}" está vencida`);
-        }
-    }
-
-    scheduleLocalNotification(task) {
-        if (!task.dueDate) return;
-
-        const dueDate = new Date(task.dueDate);
-        const now = new Date();
-        
-        // Notificar 5 minutos antes
-        const notifyTime = new Date(dueDate.getTime() - 5 * 60 * 1000);
-        
-        if (notifyTime > now) {
-            const timeout = notifyTime.getTime() - now.getTime();
-            
-            setTimeout(() => {
-                if (!task.completed) {
-                    this.showLocalNotification('📅 Recordatorio', `"${task.text}" vence en 5 minutos`);
-                    task.notified = true;
-                    this.saveTasks();
-                }
-            }, timeout);
-        }
-    }
-
-    async showLocalNotification(title, body) {
-        if (!('Notification' in window) || Notification.permission !== 'granted') {
-            return;
-        }
-
-        const registration = await navigator.serviceWorker.ready;
-        
-        registration.showNotification(title, {
-            body: body,
-            icon: '/',
-            badge: '/',
-            vibrate: [200, 100, 200],
-            tag: 'task-reminder',
-            renotify: true,
-            actions: [
-                {
-                    action: 'open',
-                    title: 'Abrir App'
-                }
-            ]
-        });
+    areNotificationsEnabled() {
+        return localStorage.getItem('notificationsEnabled') === 'true';
     }
 
     addTask() {
@@ -202,14 +132,14 @@ class TaskManager {
             createdAt: new Date().toISOString(),
             dueDate: dateTime || null,
             notified: false,
-            notificationScheduled: false
+            notificationId: `task-${Date.now()}`
         };
 
         this.tasks.push(task);
         this.saveTasks();
         this.renderTasks();
         
-        // Programar notificaciones para la nueva tarea
+        // Programar notificaciones si tiene fecha
         if (task.dueDate) {
             this.scheduleTaskNotifications(task);
         }
@@ -217,6 +147,9 @@ class TaskManager {
         this.taskInput.value = '';
         this.taskDateTime.value = '';
         this.taskInput.focus();
+
+        // Mostrar confirmación
+        this.showLocalNotification('✅ Tarea Agregada', `"${text}" fue agregada correctamente`);
     }
 
     scheduleTaskNotifications(task) {
@@ -225,49 +158,105 @@ class TaskManager {
         const dueDate = new Date(task.dueDate);
         const now = new Date();
 
+        console.log('Programando notificaciones para:', task.text, 'en', dueDate);
+
         // Notificación 1 hora antes
         const oneHourBefore = new Date(dueDate.getTime() - 60 * 60 * 1000);
         if (oneHourBefore > now) {
             const timeout = oneHourBefore.getTime() - now.getTime();
+            console.log('Notificación 1h antes en:', timeout, 'ms');
+            
             setTimeout(() => {
-                if (!task.completed) {
-                    this.showLocalNotification('🔔 Tarea Próxima', `"${task.text}" vence en 1 hora`);
+                if (!task.completed && !task.notified) {
+                    this.showLocalNotification('🔔 Recordatorio', `"${task.text}" vence en 1 hora`);
                 }
             }, timeout);
         }
 
-        // Notificación 5 minutos antes (ya programada arriba)
-        this.scheduleLocalNotification(task);
+        // Notificación 15 minutos antes
+        const fifteenMinBefore = new Date(dueDate.getTime() - 15 * 60 * 1000);
+        if (fifteenMinBefore > now) {
+            const timeout = fifteenMinBefore.getTime() - now.getTime();
+            console.log('Notificación 15min antes en:', timeout, 'ms');
+            
+            setTimeout(() => {
+                if (!task.completed && !task.notified) {
+                    this.showLocalNotification('⏰ Tarea Próxima', `"${task.text}" vence en 15 minutos`);
+                }
+            }, timeout);
+        }
 
         // Notificación en el momento exacto
         if (dueDate > now) {
             const timeout = dueDate.getTime() - now.getTime();
-            setTimeout(() => {
-                if (!task.completed) {
+            console.log('Notificación exacta en:', timeout, 'ms');
+            
+            const timeoutId = setTimeout(() => {
+                if (!task.completed && !task.notified) {
                     this.showLocalNotification('📅 Tarea Pendiente', `"${task.text}" vence ahora`);
                     task.notified = true;
                     this.saveTasks();
                 }
             }, timeout);
+
+            // Guardar el timeout ID para poder cancelarlo si es necesario
+            task.timeoutId = timeoutId;
+        }
+
+        this.saveTasks();
+    }
+
+    async showLocalNotification(title, body) {
+        if (!this.areNotificationsEnabled()) {
+            console.log('Notificaciones no permitidas');
+            return;
+        }
+
+        try {
+            // Usar notificaciones del Service Worker si está disponible
+            if (this.serviceWorker && this.serviceWorker.active) {
+                this.serviceWorker.active.postMessage({
+                    type: 'SHOW_NOTIFICATION',
+                    title: title,
+                    body: body
+                });
+            } else {
+                // Fallback a notificaciones normales
+                const notification = new Notification(title, {
+                    body: body,
+                    icon: '/',
+                    badge: '/',
+                    tag: 'task-reminder',
+                    requireInteraction: true
+                });
+
+                notification.onclick = () => {
+                    window.focus();
+                    notification.close();
+                };
+            }
+            
+            console.log('Notificación mostrada:', title, body);
+        } catch (error) {
+            console.log('Error mostrando notificación:', error);
         }
     }
 
-    checkScheduledTasks() {
+    restoreScheduledNotifications() {
+        console.log('Restaurando notificaciones programadas...');
         const now = new Date();
         
         this.tasks.forEach(task => {
             if (task.dueDate && !task.completed && !task.notified) {
                 const dueDate = new Date(task.dueDate);
                 
-                // Si la tarea ya venció
-                if (dueDate <= now) {
-                    this.showLocalNotification('⏰ Tarea Vencida', `"${task.text}" está vencida`);
+                // Si la tarea aún no ha vencido, reprogramar notificaciones
+                if (dueDate > now) {
+                    console.log('Reprogramando notificaciones para:', task.text);
+                    this.scheduleTaskNotifications(task);
+                } else {
+                    // Si ya venció, marcar como notificada
                     task.notified = true;
-                } 
-                // Si falta menos de 1 hora
-                else if ((dueDate.getTime() - now.getTime()) <= 60 * 60 * 1000 && !task.notificationScheduled) {
-                    this.showLocalNotification('🔔 Tarea Próxima', `"${task.text}" vence en menos de 1 hora`);
-                    task.notificationScheduled = true;
                 }
             }
         });
@@ -275,25 +264,66 @@ class TaskManager {
         this.saveTasks();
     }
 
+    checkScheduledTasks() {
+        const now = new Date();
+        let needsSave = false;
+        
+        this.tasks.forEach(task => {
+            if (task.dueDate && !task.completed && !task.notified) {
+                const dueDate = new Date(task.dueDate);
+                
+                // Si la tarea ya venció y no fue notificada
+                if (dueDate <= now) {
+                    this.showLocalNotification('🚨 Tarea Vencida', `"${task.text}" está vencida`);
+                    task.notified = true;
+                    needsSave = true;
+                }
+            }
+        });
+        
+        if (needsSave) {
+            this.saveTasks();
+        }
+    }
+
     toggleTask(id) {
         const task = this.tasks.find(t => t.id === id);
         if (task) {
             task.completed = !task.completed;
+            
+            // Si se completa, cancelar notificaciones futuras
+            if (task.completed && task.timeoutId) {
+                clearTimeout(task.timeoutId);
+            }
+            
             this.saveTasks();
             this.renderTasks();
         }
     }
 
     deleteTask(id) {
+        const task = this.tasks.find(t => t.id === id);
+        if (task && task.timeoutId) {
+            clearTimeout(task.timeoutId);
+        }
+        
         this.tasks = this.tasks.filter(t => t.id !== id);
         this.saveTasks();
         this.renderTasks();
     }
 
     clearCompleted() {
+        this.tasks.forEach(task => {
+            if (task.completed && task.timeoutId) {
+                clearTimeout(task.timeoutId);
+            }
+        });
+        
         this.tasks = this.tasks.filter(t => !t.completed);
         this.saveTasks();
         this.renderTasks();
+        
+        this.showLocalNotification('🧹 Limpieza', 'Tareas completadas eliminadas');
     }
 
     renderTasks() {
@@ -317,7 +347,7 @@ class TaskManager {
                 <div class="task-content">
                     <div class="task-text">${task.text}</div>
                     ${task.dueDate ? 
-                        `<div class="task-date">📅 ${this.formatDate(task.dueDate)} ${this.isOverdue(task) ? '⏰ VENCIDA' : ''}</div>` : 
+                        `<div class="task-date">📅 ${this.formatDate(task.dueDate)} ${this.isOverdue(task) && !task.completed ? '⏰ VENCIDA' : ''}</div>` : 
                         ''
                     }
                 </div>
@@ -350,12 +380,15 @@ class TaskManager {
         const total = this.tasks.length;
         const completed = this.tasks.filter(t => t.completed).length;
         const pending = total - completed;
+        const overdue = this.tasks.filter(t => this.isOverdue(t) && !t.completed).length;
 
-        this.taskCount.textContent = `Total: ${total} | Pendientes: ${pending} | Completadas: ${completed}`;
+        this.taskCount.textContent = `Total: ${total} | Pendientes: ${pending} | Completadas: ${completed} ${overdue > 0 ? `| Vencidas: ${overdue}` : ''}`;
     }
 
     saveTasks() {
         localStorage.setItem('tasks', JSON.stringify(this.tasks));
+        // También guardar el estado de las notificaciones
+        localStorage.setItem('lastSave', new Date().toISOString());
     }
 
     loadTasks() {
@@ -370,6 +403,7 @@ class TaskManager {
             
             if (outcome === 'accepted') {
                 this.installBtn.style.display = 'none';
+                this.showLocalNotification('🎉 App Instalada', '¡Ahora puedes usar la app sin navegador!');
             }
             
             this.deferredPrompt = null;
@@ -377,4 +411,8 @@ class TaskManager {
     }
 }
 
-const taskManager = new TaskManager();
+// Inicializar la app cuando se carga la página
+let taskManager;
+document.addEventListener('DOMContentLoaded', () => {
+    taskManager = new TaskManager();
+});
