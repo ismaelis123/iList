@@ -1,15 +1,15 @@
 {
     "name": "Mi Lista de Tareas",
     "short_name": "TareasApp",
-    "description": "Una aplicación de lista de tareas progresiva",
+    "description": "Lista de tareas con notificaciones push",
     "start_url": "/",
     "display": "standalone",
     "background_color": "#ffffff",
-    "theme_color": "#4f46e5",
+    "theme_color": "#4299E1",
     "orientation": "portrait",
     "icons": [
         {
-            "src": "data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMTkyIiBoZWlnaHQ9IjE5MiIgdmlld0JveD0iMCAwIDE5MiAxOTIiIGZpbGw9Im5vbmUiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+CjxyZWN0IHdpZHRoPSIxOTIiIGhlaWdodD0iMTkyIiByeD0iMjQiIGZpbGw9IiM0ZjQ2ZTUiLz4KPHN2ZyB4PSI0OCIgeT0iNDgiIHdpZHRoPSI5NiIgaGVpZ2h0PSI5NiIgdmlld0JveD0iMCAwIDI0IDI0IiBmaWxsPSJub25lIiBzdHJva2U9IndoaXRlIiBzdHJva2Utd2lkdGg9IjIiPgo8cGF0aCBkPSJNOSA1SDdDNSU4OSA1IDUgNS44OSA1IDdWMTlDNSAyMC4xMSA1Ljg5IDIxIDcgMjFIMTdDMTguMTEgMjEgMTkgMjAuMTEgMTkgMTlWMTdIOSA1Wk0xOSA3VjVIMTdDNS44OSA1IDUgNS44OSA1IDdIMTdDMTguMTEgNyAxOSA3Ljg5IDE5IDlaIi8+Cjwvc3ZnPgo8L3N2Zz4K",
+            "src": "data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMTkyIiBoZWlnaHQ9IjE5MiIgdmlld0JveD0iMCAwIDE5MiAxOTIiIGZpbGw9Im5vbmUiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+CjxyZWN0IHdpZHRoPSIxOTIiIGhlaWdodD0iMTkyIiByeD0iMjQiIGZpbGw9IiM0MjlBRTEiLz4KPHN2ZyB4PSI0OCIgeT0iNDgiIHdpZHRoPSI5NiIgaGVpZ2h0PSI5NiIgdmlld0JveD0iMCAwIDI0IDI0IiBmaWxsPSJub25lIiBzdHJva2U9IndoaXRlIiBzdHJva2Utd2lkdGg9IjIiPgo8cGF0aCBkPSJNOSA1SDdDNSU4OSA1IDUgNS44OSA1IDdWMTlDNSAyMC4xMSA1Ljg5IDIxIDcgMjFIMTdDMTguMTEgMjEgMTkgMjAuMTEgMTkgMTlWMTdIOSA1Wk0xOSA3VjVIMTdDNS44OSA1IDUgNS44OSA1IDdIMTdDMTguMTEgNyAxOSA3Ljg5IDE5IDlaIi8+Cjwvc3ZnPgo8L3N2Zz4K",
             "sizes": "192x192",
             "type": "image/svg+xml"
         }
